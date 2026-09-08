@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Dodger Stadium Finder</title>
 
-  <!-- Kiosk / Fullscreen Web App Meta Tags -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="theme-color" content="#005A9C">
@@ -17,18 +16,11 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { width: 100%; height: 100%; overflow: hidden; background: #005A9C; font-family: sans-serif; }
-    
     #app { display: flex; flex-direction: column; height: 100vh; width: 100vw; }
-    
     header { background: #005A9C; color: white; padding: 12px; text-align: center; font-size: 1.2rem; font-weight: bold; flex-shrink: 0; }
-    
-    /* Explicit height/width for Leaflet container */
-    #map { flex: 1; width: 100%; height: 100%; min-height: 200px; background: #e5e3df; z-index: 1; }
-    
+    #map { flex: 1; width: 100%; height: 100%; background: #e5e3df; z-index: 1; }
     .controls { display: flex; justify-content: space-around; padding: 12px; background: white; border-top: 2px solid #ddd; gap: 8px; flex-shrink: 0; z-index: 1000; }
-    
     .btn { flex: 1; padding: 12px 8px; border: none; border-radius: 8px; font-weight: bold; font-size: 0.95rem; color: white; background: #005A9C; cursor: pointer; text-align: center; }
-    .btn:active { opacity: 0.8; }
     .btn.active { background: #28a745; }
     .btn.danger { background: #dc3545; }
   </style>
@@ -46,79 +38,79 @@
 </div>
 
 <script>
-  // Initialize Leaflet Map centered on Dodger Stadium
-  const stadiumCoords = [34.0739, -118.2400];
-  const map = L.map('map').setView(stadiumCoords, 16);
+  document.addEventListener("DOMContentLoaded", function() {
+    const stadiumCoords = [34.0739, -118.2400];
+    const map = L.map('map').setView(stadiumCoords, 16);
 
-  // Reliable Map Tiles
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '© OpenStreetMap'
-  }).addTo(map);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap'
+    }).addTo(map);
 
-  // Force Leaflet to recalculate map container bounds
-  setTimeout(function() {
-    map.invalidateSize();
-  }, 500);
+    // Forces Leaflet to calculate container height after full screen render
+    setTimeout(function() {
+      map.invalidateSize();
+    }, 1000);
 
-  let carMarker = null;
-  let seatMarker = null;
+    let carMarker = null;
+    let seatMarker = null;
 
-  const carIcon = L.divIcon({ html: '<span style="font-size:24px;">🚗</span>', className: 'custom-pin', iconSize: [30, 30] });
-  const seatIcon = L.divIcon({ html: '<span style="font-size:24px;">🎟️</span>', className: 'custom-pin', iconSize: [30, 30] });
+    const carIcon = L.divIcon({ html: '<span style="font-size:24px;">🚗</span>', className: 'custom-pin', iconSize: [30, 30] });
+    const seatIcon = L.divIcon({ html: '<span style="font-size:24px;">🎟️</span>', className: 'custom-pin', iconSize: [30, 30] });
 
-  function loadSavedLocations() {
-    const savedCar = localStorage.getItem('dodger_car');
-    const savedSeat = localStorage.getItem('dodger_seat');
+    function loadSavedLocations() {
+      const savedCar = localStorage.getItem('dodger_car');
+      const savedSeat = localStorage.getItem('dodger_seat');
 
-    if (savedCar) {
-      const latlng = JSON.parse(savedCar);
-      carMarker = L.marker(latlng, { icon: carIcon }).addTo(map).bindPopup('Parked Car').openPopup();
-      document.getElementById('btnCar').classList.add('active');
+      if (savedCar) {
+        const latlng = JSON.parse(savedCar);
+        carMarker = L.marker(latlng, { icon: carIcon }).addTo(map).bindPopup('Parked Car').openPopup();
+        document.getElementById('btnCar').classList.add('active');
+      }
+
+      if (savedSeat) {
+        const latlng = JSON.parse(savedSeat);
+        seatMarker = L.marker(latlng, { icon: seatIcon }).addTo(map).bindPopup('Your Seat');
+        document.getElementById('btnSeat').classList.add('active');
+      }
     }
 
-    if (savedSeat) {
-      const latlng = JSON.parse(savedSeat);
-      seatMarker = L.marker(latlng, { icon: seatIcon }).addTo(map).bindPopup('Your Seat');
-      document.getElementById('btnSeat').classList.add('active');
-    }
-  }
+    let mode = null;
 
-  let mode = null;
+    window.saveLocation = function(type) {
+      mode = type;
+      alert(`Tap anywhere on the map to place your ${type === 'car' ? 'Parked Car 🚗' : 'Seat 🎟️'}!`);
+    };
 
-  function saveLocation(type) {
-    mode = type;
-    alert(`Tap anywhere on the map to place your ${type === 'car' ? 'Parked Car 🚗' : 'Seat 🎟️'}!`);
-  }
+    map.on('click', function(e) {
+      if (!mode) return;
 
-  map.on('click', function(e) {
-    if (!mode) return;
+      if (mode === 'car') {
+        if (carMarker) map.removeLayer(carMarker);
+        carMarker = L.marker(e.latlng, { icon: carIcon }).addTo(map).bindPopup('Parked Car').openPopup();
+        localStorage.setItem('dodger_car', JSON.stringify([e.latlng.lat, e.latlng.lng]));
+        document.getElementById('btnCar').classList.add('active');
+      } else if (mode === 'seat') {
+        if (seatMarker) map.removeLayer(seatMarker);
+        seatMarker = L.marker(e.latlng, { icon: seatIcon }).addTo(map).bindPopup('Your Seat').openPopup();
+        localStorage.setItem('dodger_seat', JSON.stringify([e.latlng.lat, e.latlng.lng]));
+        document.getElementById('btnSeat').classList.add('active');
+      }
 
-    if (mode === 'car') {
+      mode = null;
+    });
+
+    window.clearSaved = function() {
+      localStorage.removeItem('dodger_car');
+      localStorage.removeItem('dodger_seat');
       if (carMarker) map.removeLayer(carMarker);
-      carMarker = L.marker(e.latlng, { icon: carIcon }).addTo(map).bindPopup('Parked Car').openPopup();
-      localStorage.setItem('dodger_car', JSON.stringify([e.latlng.lat, e.latlng.lng]));
-      document.getElementById('btnCar').classList.add('active');
-    } else if (mode === 'seat') {
       if (seatMarker) map.removeLayer(seatMarker);
-      seatMarker = L.marker(e.latlng, { icon: seatIcon }).addTo(map).bindPopup('Your Seat').openPopup();
-      localStorage.setItem('dodger_seat', JSON.stringify([e.latlng.lat, e.latlng.lng]));
-      document.getElementById('btnSeat').classList.add('active');
-    }
+      document.getElementById('btnCar').classList.remove('active');
+      document.getElementById('btnSeat').classList.remove('active');
+    };
 
-    mode = null;
+    loadSavedLocations();
   });
-
-  function clearSaved() {
-    localStorage.removeItem('dodger_car');
-    localStorage.removeItem('dodger_seat');
-    if (carMarker) map.removeLayer(carMarker);
-    if (seatMarker) map.removeLayer(seatMarker);
-    document.getElementById('btnCar').classList.remove('active');
-    document.getElementById('btnSeat').classList.remove('active');
-  }
-
-  loadSavedLocations();
 </script>
 
 </body>
