@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dodger Stadium Parking & Seat Finder</title>
+  <!-- Leaflet CSS for interactive mapping -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    :root {
+      --dodger-blue: #005A9C;
+      --dodger-red: #EF3E42;
+      --bg-gray: #F8F9FA;
+      --card-bg: #FFFFFF;
+      --text-dark: #1D252C;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg-gray);
+      color: var(--text-dark);
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    header {
+      width: 100%;
+      background-color: var(--dodger-blue);
+      color: white;
+      text-align: center;
+      padding: 16px 0;
+      border-bottom: 4px solid var(--dodger-red);
+      box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 1.4rem;
+      letter-spacing: 0.5px;
+    }
+
+    .container {
+      width: 90%;
+      max-width: 450px;
+      margin: 15px auto;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .btn-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    button {
+      padding: 14px;
+      font-size: 0.95rem;
+      font-weight: bold;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      color: white;
+      transition: background 0.2s;
+    }
+
+    .btn-car { background-color: var(--dodger-blue); }
+    .btn-seat { background-color: var(--dodger-red); }
+    .btn-find { background-color: #10B981; grid-column: span 2; font-size: 1.1rem; }
+
+    button:active { opacity: 0.85; }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: 10px;
+      padding: 15px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
+
+    .status-item {
+      margin-bottom: 8px;
+      font-size: 0.9rem;
+    }
+
+    .status-item span {
+      font-weight: bold;
+      color: var(--dodger-blue);
+    }
+
+    #map {
+      height: 320px;
+      width: 100%;
+      border-radius: 10px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+
+    .fallback-box {
+      margin-top: 10px;
+      padding: 10px;
+      background-color: #FEF3C7;
+      border-left: 4px solid #F59E0B;
+      font-size: 0.85rem;
+      color: #92400E;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Dodger Stadium Finder</h1>
+  </header>
+
+  <div class="container">
+    <div class="btn-group">
+      <button class="btn-car" onclick="saveLocation('car')">Parked Car</button>
+      <button class="btn-seat" onclick="saveLocation('seat')">At Seat</button>
+      <button class="btn-find" onclick="findCar()">Find My Car</button>
+    </div>
+
+    <div class="card">
+      <div class="status-item">Car Location: <span id="car-status">Not Saved</span></div>
+      <div class="status-item">Seat Location: <span id="seat-status">Not Saved</span></div>
+      <div class="status-item">Live Location Tracking: <span id="gps-status" style="color: gray;">Inactive</span></div>
+      
+      <div class="fallback-box">
+        <strong>Structure/Offline Note:</strong> If GPS is unavailable in parking structures, the map holds your last saved coordinates and tracks your position as you move back into range.
+      </div>
+    </div>
+
+    <div id="map"></div>
+  </div>
+
+  <!-- Leaflet JS for map features -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    // Initialize map centered on Dodger Stadium
+    const stadiumCoords = [34.0739, -118.2400];
+    const map = L.map('map').setView(stadiumCoords, 16);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap'
+    }).addTo(map);
+
+    let carMarker = null;
+    let seatMarker = null;
+    let userMarker = null;
+
+    let carCoords = null;
+    let seatCoords = null;
+
+    // Load saved locations from persistent storage if available
+    window.onload = function() {
+      const savedCar = localStorage.getItem('dodger_car');
+      const savedSeat = localStorage.getItem('dodger_seat');
+
+      if (savedCar) {
+        carCoords = JSON.parse(savedCar);
+        updateMarker('car', carCoords);
+        document.getElementById('car-status').innerText = `${carCoords.lat.toFixed(4)}, ${carCoords.lng.toFixed(4)}`;
+      }
+      if (savedSeat) {
+        seatCoords = JSON.parse(savedSeat);
+        updateMarker('seat', seatCoords);
+        document.getElementById('seat-status').innerText = `${seatCoords.lat.toFixed(4)}, ${seatCoords.lng.toFixed(4)}`;
+      }
+    };
+
+    function saveLocation(type) {
+      if ('geolocation' in navigator) {
+        navigator.geolocation.getCurrentPosition((position) => {
+          const coords = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          };
+
+          if (type === 'car') {
+            carCoords = coords;
+            localStorage.setItem('dodger_car', JSON.stringify(coords));
+            document.getElementById('car-status').innerText = `${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`;
+            updateMarker('car', coords);
+          } else if (type === 'seat') {
+            seatCoords = coords;
+            localStorage.setItem('dodger_seat', JSON.stringify(coords));
+            document.getElementById('seat-status').innerText = `${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`;
+            updateMarker('seat', coords);
+          }
+        }, (error) => {
+          alert('GPS error: Unable to retrieve location.');
+        }, { enableHighAccuracy: true });
+      } else {
+        alert('Geolocation is not supported by your browser.');
+      }
+    }
+
+    function updateMarker(type, coords) {
+      if (type === 'car') {
+        if (carMarker) map.removeLayer(carMarker);
+        carMarker = L.marker([coords.lat, coords.lng]).addTo(map).bindPopup('Parked Car').openPopup();
+      } else if (type === 'seat') {
+        if (seatMarker) map.removeLayer(seatMarker);
+        seatMarker = L.circleMarker([coords.lat, coords.lng], { color: 'red', radius: 8 }).addTo(map).bindPopup('Your Seat');
+      }
+      map.setView([coords.lat, coords.lng], 17);
+    }
+
+    function findCar() {
+      if (!carCoords) {
+        alert('Please save your car location first!');
+        return;
+      }
+
+      document.getElementById('gps-status').innerText = 'Active (Tracking Pin)';
+      document.getElementById('gps-status').style.color = '#10B981';
+
+      if ('geolocation' in navigator) {
+        navigator.geolocation.watchPosition((position) => {
+          const userCoords = [position.coords.latitude, position.coords.longitude];
+
+          if (userMarker) {
+            userMarker.setLatLng(userCoords);
+          } else {
+            userMarker = L.circleMarker(userCoords, { color: 'blue', radius: 6, fillColor: '#005A9C', fillOpacity: 0.8 }).addTo(map).bindPopup('You Are Here');
+          }
+
+          // Adjust map to show both user position and car position
+          const bounds = L.latLngBounds([userCoords, [carCoords.lat, carCoords.lng]]);
+          map.fitBounds(bounds, { padding: [50, 50] });
+
+        }, (error) => {
+          console.warn('GPS Signal dropped. Showing saved location.');
+        }, { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 });
+      }
+    }
+  </script>
+</body>
+</html>
